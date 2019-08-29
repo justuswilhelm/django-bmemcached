@@ -1,5 +1,9 @@
+import logging
 import os
 from django.core.cache.backends import memcached
+
+
+logger = logging.getLogger(__name__)
 
 
 class BMemcached(memcached.BaseMemcachedCache):
@@ -59,6 +63,43 @@ class BMemcached(memcached.BaseMemcachedCache):
         # Override base behavior of disconnecting from memcache on every HTTP request.
         # This method is, in practice, only called by Django on the request_finished signal
         pass
+
+    def set_many(self, data, timeout=DEFAULT_TIMEOUT, version=None):
+        """
+        Overide set_many and account for Boolean return type.
+
+        Original function:
+        safe_data = {}
+        original_keys = {}
+        for key, value in data.items():
+            safe_key = self.make_key(key, version=version)
+            safe_data[safe_key] = value
+            original_keys[safe_key] = key
+        failed_keys = self._cache.set_multi(safe_data, self.get_backend_timeout(timeout))
+        return [original_keys[k] for k in failed_keys]
+
+        The error was
+
+        .../python3.6/site-packages/django/core/cache/backends/memcached.py in set_many(self, data, timeout, version)
+            137             original_keys[safe_key] = key
+            138         failed_keys = self._cache.set_multi(safe_data, self.get_backend_timeout(timeout))
+        --> 139         return [original_keys[k] for k in failed_keys]
+            140
+            141     def delete_many(self, keys, version=None):
+
+        TypeError: 'bool' object is not iterable
+        """
+        safe_data = {}
+        original_keys = {}
+        for key, value in data.items():
+            safe_key = self.make_key(key, version=version)
+            safe_data[safe_key] = value
+            original_keys[safe_key] = key
+        success = self._cache.set_multi(safe_data, self.get_backend_timeout(timeout))
+        # Instead of returning the failing keys, we just log
+        if not success:
+            logger.error("Setting the cache was not successful.")
+        return []
 
     @property
     def _cache(self):
