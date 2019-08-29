@@ -26,6 +26,35 @@ class BMemcached(memcached.BaseMemcachedCache):
 
         super(BMemcached, self).__init__(server, params, library=bmemcached, value_not_found_exception=ValueError)
 
+    def get_many(self, keys, version=None):
+        """
+        Override this behavior and fix the keys data type.
+
+        The code that was overriden looked like this:
+
+        key_map = {self.make_key(key, version=version): key for key in keys}
+        ret = self._cache.get_multi(key_map.keys())
+        return {key_map[k]: v for k, v in ret.items()}
+
+        (taken from a44d80f88e22eda24dacef48e368895ebea96635)
+
+        The problem is that key_map would be a dict_keys object, whereas
+        in reality, a list object is expected by self._cache.get_multi.
+
+        This would emit stack traces like:
+
+        File ".../python3.6/site-packages/django/core/cache/backends/memcached.py", line 88, in get_many
+          ret = self._cache.get_multi(key_map.keys())
+        File ".../python3.6/site-packages/bmemcached/client/replicating.py", line 82, in get_multi
+          results = server.get_multi(keys)
+        File ".../python3.6/site-packages/bmemcached/protocol.py", line 490, in get_multi
+          keys, last = keys[:-1], str_to_bytes(keys[-1])
+        """
+        key_map = {self.make_key(key, version=version): key for key in keys}
+        keys = list(key_map)
+        ret = self._cache.get_multi(keys)
+        return {key_map[k]: v for k, v in ret.items()}
+
     def close(self, **kwargs):
         # Override base behavior of disconnecting from memcache on every HTTP request.
         # This method is, in practice, only called by Django on the request_finished signal
