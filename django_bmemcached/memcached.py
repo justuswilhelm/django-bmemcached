@@ -1,6 +1,7 @@
 import logging
 import os
 from django.core.cache.backends import memcached
+from django.core.cache.backends.base import DEFAULT_TIMEOUT
 
 
 logger = logging.getLogger(__name__)
